@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState,useEffect } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -19,66 +19,56 @@ import {
 import { Search, Trash2, Eye, Edit, Plus, AlertTriangle, BookOpen } from "lucide-react"
 import Link from "next/link"
 
-// Mock courses data
-const mockCourses = [
-  {
-    id: "CS209",
-    title: "Introduction to Computer Programming",
-    description:
-      "This course provides a basic introduction to Computer Programming using Python and fundamental programming concepts.",
-    prerequisites: [],
-    instances: 3,
-    canDelete: true,
-  },
-  {
-    id: "CS301",
-    title: "Data Structures and Algorithms",
-    description:
-      "Advanced programming concepts focusing on efficient data organization and algorithmic problem solving.",
-    prerequisites: ["CS209"],
-    instances: 2,
-    canDelete: false,
-  },
-  {
-    id: "CS401",
-    title: "Web Development Fundamentals",
-    description:
-      "Comprehensive introduction to modern web development including HTML, CSS, JavaScript, and frameworks.",
-    prerequisites: ["CS209"],
-    instances: 4,
-    canDelete: true,
-  },
-  {
-    id: "CS501",
-    title: "Database Management Systems",
-    description: "Design and implementation of database systems, SQL, and database administration concepts.",
-    prerequisites: ["CS301"],
-    instances: 1,
-    canDelete: false,
-  },
-  {
-    id: "CS601",
-    title: "Advanced React Development",
-    description: "Deep dive into React ecosystem, state management, performance optimization, and modern patterns.",
-    prerequisites: ["CS401"],
-    instances: 0,
-    canDelete: true,
-  },
-]
-
 export default function CoursesPage() {
-  const [courses, setCourses] = useState(mockCourses)
+  const [courses, setCourses] = useState([])
   const [searchTerm, setSearchTerm] = useState("")
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState("")
+
+  useEffect(() => {
+    const fetchCourses = async () => {
+      try {
+        const res = await fetch("http://localhost:8082/api/courses")
+        if (!res.ok) throw new Error("Failed to fetch courses")
+        const result = await res.json()
+        const dataWithFlags = result.data.map((course) => ({
+          ...course,
+          canDelete: course.instances.length === 0,
+        }))
+        setCourses(dataWithFlags)
+      } catch (err) {
+        console.error(err)
+        setError("Could not load courses")
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchCourses()
+  }, [])
 
   const filteredCourses = courses.filter(
     (course) =>
       course.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      course.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      course.description.toLowerCase().includes(searchTerm.toLowerCase()),
+      course.courseId.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      course.description.toLowerCase().includes(searchTerm.toLowerCase())
   )
 
-  const handleDeleteCourse = (courseId) => {
-    setCourses(courses.filter((course) => course.id !== courseId))
+  const handleDeleteCourse = async (courseId) => {
+    console.log("Deleting course:", courseId)
+
+    try {
+
+      const res = await fetch(`http://localhost:8082/api/courses/${encodeURIComponent(courseId)}`, {
+        method: "DELETE",
+      })
+
+      if (!res.ok) throw new Error("Failed to delete course")
+      setCourses((prev) => prev.filter((c) => c.courseId !== courseId))
+    } catch (err) {
+      console.error(err)
+      alert("Failed to delete course. It may have active instances or dependencies.")
+    }
   }
 
   return (
@@ -111,16 +101,16 @@ export default function CoursesPage() {
       {/* Courses Grid */}
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
         {filteredCourses.map((course) => (
-          <Card key={course.id} className="bg-gray-900 border-gray-800 card-hover">
+          <Card key={course.courseId} className="bg-gray-900 border-gray-800 card-hover">
             <CardHeader className="pb-4">
               <div className="flex justify-between items-start">
                 <div className="space-y-1">
                   <CardTitle className="text-lg text-white">{course.title}</CardTitle>
-                  <CardDescription className="font-mono text-blue-400 font-medium">{course.id}</CardDescription>
+                  <CardDescription className="font-mono text-blue-400 font-medium">{course.courseId}</CardDescription>
                 </div>
                 <div className="flex items-center gap-2">
                   <Badge variant="secondary" className="bg-gray-800 text-gray-300">
-                    {course.instances} instances
+                    {course.instances.length} instances
                   </Badge>
                 </div>
               </div>
@@ -132,9 +122,9 @@ export default function CoursesPage() {
               {/* Prerequisites */}
               <div className="space-y-2">
                 <p className="text-sm font-medium text-gray-400">Prerequisites:</p>
-                {course.prerequisites.length > 0 ? (
+                {course.prerequisiteIds.length > 0 ? (
                   <div className="flex flex-wrap gap-1">
-                    {course.prerequisites.map((prereq) => (
+                    {course.prerequisiteIds.map((prereq) => (
                       <Badge key={prereq} variant="outline" className="text-xs border-gray-600 text-gray-300">
                         {prereq}
                       </Badge>
@@ -147,7 +137,7 @@ export default function CoursesPage() {
 
               {/* Actions */}
               <div className="flex gap-2 pt-2">
-                <Link href={`/courses/${course.id}`} className="flex-1">
+                <Link href={`/courses/${course.courseId}`} className="flex-1">
                   <Button
                     variant="outline"
                     size="sm"
@@ -157,7 +147,7 @@ export default function CoursesPage() {
                     View
                   </Button>
                 </Link>
-                <Link href={`/courses/${course.id}/edit`} className="flex-1">
+                <Link href={`/courses/${course.courseId}/edit`} className="flex-1">
                   <Button
                     variant="outline"
                     size="sm"
@@ -190,7 +180,7 @@ export default function CoursesPage() {
                         Cancel
                       </AlertDialogCancel>
                       <AlertDialogAction
-                        onClick={() => handleDeleteCourse(course.id)}
+                        onClick={() => handleDeleteCourse(course.courseId)}
                         className="bg-red-600 text-white hover:bg-red-700"
                       >
                         Delete

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState,useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -12,25 +12,34 @@ import { Badge } from "@/components/ui/badge"
 import { ArrowLeft, X, BookOpen, Plus } from "lucide-react"
 import Link from "next/link"
 
-// Mock existing courses for prerequisites
-const existingCourses = [
-  { id: "CS101", title: "Programming Fundamentals" },
-  { id: "CS209", title: "Introduction to Computer Programming" },
-  { id: "CS301", title: "Data Structures and Algorithms" },
-  { id: "CS401", title: "Web Development Fundamentals" },
-  { id: "MATH201", title: "Discrete Mathematics" },
-  { id: "MATH301", title: "Linear Algebra" },
-]
-
 export default function CreateCoursePage() {
   const router = useRouter()
   const [formData, setFormData] = useState({
     title: "",
-    id: "",
+    courseId: "", 
     description: "",
   })
+
+  const [existingCourses, setExistingCourses] = useState([])
   const [selectedPrerequisites, setSelectedPrerequisites] = useState([])
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [error, setError] = useState("")
+
+  useEffect(() => {
+    const fetchCourses = async () => {
+      try {
+        const response = await fetch("http://localhost:8082/api/courses")
+        if (!response.ok) throw new Error("Failed to fetch courses")
+        const data = await response.json()
+        setExistingCourses(data.data)
+      } catch (err) {
+        console.error(err)
+        setError("Error fetching courses")
+      }
+    }
+
+    fetchCourses()
+  }, [])
 
   const handleInputChange = (field, value) => {
     setFormData((prev) => ({ ...prev, [field]: value }))
@@ -38,28 +47,44 @@ export default function CreateCoursePage() {
 
   const handlePrerequisiteToggle = (courseId) => {
     setSelectedPrerequisites((prev) =>
-      prev.includes(courseId) ? prev.filter((id) => id !== courseId) : [...prev, courseId],
+      prev.includes(courseId) ? prev.filter((courseId) => courseId !== courseId) : [...prev, courseId]
     )
-  }
-
-  const removePrerequisite = (courseId) => {
-    setSelectedPrerequisites((prev) => prev.filter((id) => id !== courseId))
   }
 
   const handleSubmit = async (e) => {
     e.preventDefault()
     setIsSubmitting(true)
+    setError("")
 
-    // Simulate API call
-    await new Promise((resolve) => setTimeout(resolve, 1500))
-
-    const courseData = {
-      ...formData,
-      prerequisites: selectedPrerequisites,
+    const coursePayload = {
+      title: formData.title,
+      courseId: formData.courseId,
+      description: formData.description,
+      prerequisiteIds: selectedPrerequisites, 
     }
 
-    console.log("Course created:", courseData)
-    router.push("/courses")
+    try {
+      const response = await fetch("http://localhost:8082/api/courses", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(coursePayload),
+      })
+
+      if (!response.ok) {
+        throw new Error("Failed to create course")
+      }
+
+      const result = await response.json()
+      console.log("Course created:", result)
+      router.push("/courses")
+    } catch (err) {
+      console.error(err)
+      setError("Failed to create course")
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   return (
@@ -109,14 +134,14 @@ export default function CreateCoursePage() {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="id" className="text-gray-300">
+                <Label htmlFor="courseId" className="text-gray-300">
                   Course ID *
                 </Label>
                 <Input
-                  id="id"
+                  id="courseId"
                   placeholder="e.g., CS 209"
-                  value={formData.id}
-                  onChange={(e) => handleInputChange("id", e.target.value)}
+                  value={formData.courseId}
+                  onChange={(e) => handleInputChange("courseId", e.target.value)}
                   className="bg-gray-800 border-gray-700 text-white placeholder-gray-400 focus:border-blue-500"
                   required
                 />
@@ -156,14 +181,14 @@ export default function CreateCoursePage() {
                   <p className="text-sm font-medium text-gray-300">Selected Prerequisites:</p>
                   <div className="flex flex-wrap gap-2">
                     {selectedPrerequisites.map((courseId) => {
-                      const course = existingCourses.find((c) => c.id === courseId)
+                      const course = existingCourses.find((c) => c.courseId === courseId)
                       return (
                         <Badge
                           key={courseId}
                           variant="secondary"
                           className="bg-blue-900/30 text-blue-300 border border-blue-700 flex items-center gap-2 px-3 py-1"
                         >
-                          <span className="font-mono text-xs">{course?.id}</span>
+                          <span className="font-mono text-xs">{course?.courseId}</span>
                           <span className="text-xs">-</span>
                           <span className="text-xs">{course?.title}</span>
                           <button
@@ -189,17 +214,17 @@ export default function CreateCoursePage() {
                   <div className="space-y-3">
                     {existingCourses.map((course) => (
                       <div
-                        key={course.id}
+                        key={course.courseId}
                         className="flex items-center space-x-3 p-2 rounded hover:bg-gray-700/50 transition-colors"
                       >
                         <Checkbox
-                          id={course.id}
-                          checked={selectedPrerequisites.includes(course.id)}
-                          onCheckedChange={() => handlePrerequisiteToggle(course.id)}
+                          courseId={course.courseId}
+                          checked={selectedPrerequisites.includes(course.courseId)}
+                          onCheckedChange={() => handlePrerequisiteToggle(course.courseId)}
                           className="border-gray-600 data-[state=checked]:bg-blue-600 data-[state=checked]:border-blue-600"
                         />
-                        <Label htmlFor={course.id} className="text-sm cursor-pointer flex-1 text-gray-300">
-                          <span className="font-mono text-blue-400">{course.id}</span>
+                        <Label htmlFor={course.courseId} className="text-sm cursor-pointer flex-1 text-gray-300">
+                          <span className="font-mono text-blue-400">{course.courseId}</span>
                           <span className="text-gray-500 mx-2">-</span>
                           <span>{course.title}</span>
                         </Label>

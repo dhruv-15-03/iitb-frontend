@@ -1,134 +1,79 @@
 "use client"
 
+import { useState, useEffect } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { ArrowLeft, Edit, Calendar, BookOpen, ArrowRight, Users, GraduationCap } from "lucide-react"
+import { ArrowLeft, Edit, Calendar, BookOpen, ArrowRight, GraduationCap, Loader2 } from "lucide-react"
 import Link from "next/link"
 
-const allCourses = [
-  {
-    id: "CS101",
-    title: "Programming Fundamentals",
-    description: "Basic introduction to programming concepts and logic using pseudocode and simple algorithms.",
-    prerequisites: [],
-    instances: 2,
-  },
-  {
-    id: "CS209",
-    title: "Introduction to Computer Programming",
-    description:
-      "This comprehensive course introduces students to the fundamental concepts of programming using Python. Students will learn basic programming constructs, problem-solving techniques, and software development practices. The course covers variables, data types, control structures, functions, and basic object-oriented programming concepts.",
-    prerequisites: [],
-    instances: 3,
-  },
-  {
-    id: "CS301",
-    title: "Data Structures and Algorithms",
-    description:
-      "Advanced programming concepts focusing on efficient data organization and algorithmic problem solving. Topics include arrays, linked lists, stacks, queues, trees, graphs, and sorting algorithms.",
-    prerequisites: ["CS209"],
-    instances: 2,
-  },
-  {
-    id: "CS401",
-    title: "Web Development Fundamentals",
-    description:
-      "Comprehensive introduction to modern web development including HTML, CSS, JavaScript, and popular frameworks. Students will build responsive web applications and learn about client-server architecture.",
-    prerequisites: ["CS209"],
-    instances: 4,
-  },
-  {
-    id: "CS501",
-    title: "Database Management Systems",
-    description:
-      "Design and implementation of database systems, SQL programming, normalization, and database administration concepts. Includes hands-on experience with popular database systems.",
-    prerequisites: ["CS301"],
-    instances: 1,
-  },
-  {
-    id: "CS601",
-    title: "Advanced React Development",
-    description:
-      "Deep dive into React ecosystem, state management, performance optimization, and modern patterns. Covers Redux, Context API, hooks, and testing strategies.",
-    prerequisites: ["CS401"],
-    instances: 0,
-  },
-  {
-    id: "CS701",
-    title: "Full Stack Development",
-    description:
-      "Complete web application development using modern technologies. Integrates frontend frameworks with backend APIs and databases.",
-    prerequisites: ["CS401", "CS501"],
-    instances: 1,
-  },
-  {
-    id: "CS801",
-    title: "Advanced Algorithms",
-    description:
-      "Complex algorithmic techniques including dynamic programming, graph algorithms, and computational complexity analysis.",
-    prerequisites: ["CS301", "CS501"],
-    instances: 1,
-  },
-]
-
-// Mock instances data for the course
-const courseInstances = [
-  {
-    id: 1,
-    instructor: "Dr. Sarah Johnson",
-    year: 2024,
-    semester: 1,
-    capacity: 30,
-    enrolled: 28,
-    status: "Active",
-  },
-  {
-    id: 2,
-    instructor: "Prof. Michael Chen",
-    year: 2024,
-    semester: 2,
-    capacity: 25,
-    enrolled: 25,
-    status: "Completed",
-  },
-  {
-    id: 3,
-    instructor: "Dr. Emily Rodriguez",
-    year: 2025,
-    semester: 1,
-    capacity: 35,
-    enrolled: 12,
-    status: "Scheduled",
-  },
-]
-
 export default function CourseDetailPage({ params }) {
-  // Find the current course
-  const courseData = allCourses.find((course) => course.id === params.id)
+  const [courseData, setCourseData] = useState(null)
+  const [prerequisiteCourses, setPrerequisiteCourses] = useState([])
+  const [dependentCourses, setDependentCourses] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
 
-  if (!courseData) {
-    return (
-      <div className="max-w-4xl mx-auto space-y-6 animate-fade-in">
-        <div className="text-center py-12">
-          <BookOpen className="mx-auto h-12 w-12 text-gray-600 mb-4" />
-          <p className="text-gray-400 text-lg">Course not found</p>
-          <Link href="/courses">
-            <Button className="mt-4 bg-blue-600 hover:bg-blue-700">
-              <ArrowLeft className="mr-2 h-4 w-4" />
-              Back to Courses
-            </Button>
-          </Link>
-        </div>
-      </div>
-    )
+  useEffect(() => {
+    const fetchCourseData = async () => {
+      try {
+        setLoading(true)
+        const courseResponse = await fetch(`http://localhost:8082/api/courses/${params.id}`)
+        if (!courseResponse.ok) {
+          throw new Error("Course not found")
+        }
+        const course = await courseResponse.json()
+        setCourseData(course.data)
+        const PrerequisiteResponse = await fetch(`http://localhost:8082/api/courses/${params.id}/prereqs`)
+        if (PrerequisiteResponse.ok) {
+          const preq = await PrerequisiteResponse.json()
+          setPrerequisiteCourses(preq.data || [])
+        }
+        const dependentsResponse = await fetch(`http://localhost:8082/api/courses/${params.id}/dependent`)
+        if (dependentsResponse.ok) {
+          const dependents = await dependentsResponse.json()
+          setDependentCourses(dependents.data || [])
+          console.log("Dependent courses:", dependents)
+        }
+      } catch (err) {
+        setError(err.message || "An error occurred")
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchCourseData()
+  }, [params.id])
+
+  const getSemesterName = (semester) => {
+    const names = {
+      1: "Spring",
+      2: "Fall",
+      3: "Summer",
+    }
+    return names[semester] || `Semester ${semester}`
   }
 
-  // Find prerequisite courses (courses this course depends on)
-  const prerequisiteCourses = allCourses.filter((course) => courseData.prerequisites.includes(course.id))
+  const getInstanceStatus = (instance) => {
+    const currentYear = new Date().getFullYear()
+    const currentMonth = new Date().getMonth() + 1
 
-  // Find dependent courses (courses that depend on this course)
-  const dependentCourses = allCourses.filter((course) => course.prerequisites.includes(courseData.id))
+    if (instance.year < currentYear) {
+      return "Completed"
+    } else if (instance.year > currentYear) {
+      return "Scheduled"
+    } else {
+      if (instance.semester === 1 && currentMonth > 6) {
+        return "Completed"
+      } else if (instance.semester === 2 && currentMonth < 8) {
+        return "Scheduled"
+      } else if (instance.semester === 2 && currentMonth >= 8) {
+        return "Active"
+      } else {
+        return "Active"
+      }
+    }
+  }
 
   const getStatusColor = (status) => {
     switch (status) {
@@ -143,9 +88,32 @@ export default function CourseDetailPage({ params }) {
     }
   }
 
-  const getSemesterName = (semester) => {
-    const names = { 1: "Semester 1", 2: "Semester 2" }
-    return names[semester] || `Semester ${semester}`
+  if (loading) {
+    return (
+      <div className="max-w-6xl mx-auto space-y-6 animate-fade-in">
+        <div className="flex items-center justify-center py-12">
+          <Loader2 className="h-8 w-8 animate-spin text-blue-400" />
+          <span className="ml-2 text-gray-300">Loading course details...</span>
+        </div>
+      </div>
+    )
+  }
+
+  if (error || !courseData) {
+    return (
+      <div className="max-w-4xl mx-auto space-y-6 animate-fade-in">
+        <div className="text-center py-12">
+          <BookOpen className="mx-auto h-12 w-12 text-gray-600 mb-4" />
+          <p className="text-gray-400 text-lg">{error || "Course not found"}</p>
+          <Link href="/courses">
+            <Button className="mt-4 bg-blue-600 hover:bg-blue-700">
+              <ArrowLeft className="mr-2 h-4 w-4" />
+              Back to Courses
+            </Button>
+          </Link>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -159,9 +127,9 @@ export default function CourseDetailPage({ params }) {
         </Link>
         <div className="flex-1">
           <h1 className="text-3xl font-bold tracking-tight text-white">{courseData.title}</h1>
-          <p className="text-blue-400 font-mono">{courseData.id}</p>
+          <p className="text-blue-400 font-mono">{courseData.courseId}</p>
         </div>
-        <Link href={`/courses/${courseData.id}/edit`}>
+        <Link href={`/courses/${courseData.courseId}/edit`}>
           <Button className="bg-blue-600 hover:bg-blue-700">
             <Edit className="mr-2 h-4 w-4" />
             Edit Course
@@ -196,13 +164,13 @@ export default function CourseDetailPage({ params }) {
                 <div className="space-y-3">
                   {prerequisiteCourses.map((prereq) => (
                     <div
-                      key={prereq.id}
+                      key={prereq.courseId}
                       className="flex items-center justify-between p-4 border border-gray-700 rounded-lg bg-gray-800/50 hover:bg-gray-800 transition-colors"
                     >
                       <div className="flex-1">
                         <div className="flex items-center gap-3">
                           <Badge variant="outline" className="border-orange-600 text-orange-300 font-mono">
-                            {prereq.id}
+                            {prereq.courseId}
                           </Badge>
                           <h3 className="font-medium text-white">{prereq.title}</h3>
                         </div>
@@ -210,9 +178,9 @@ export default function CourseDetailPage({ params }) {
                       </div>
                       <div className="flex items-center gap-2 ml-4">
                         <Badge variant="secondary" className="bg-gray-700 text-gray-300">
-                          {prereq.instances} instances
+                          {prereq.instanceCount || prereq.instances?.length || 0} instances
                         </Badge>
-                        <Link href={`/courses/${prereq.id}`}>
+                        <Link href={`/courses/${prereq.courseId}`}>
                           <Button
                             variant="outline"
                             size="sm"
@@ -245,13 +213,13 @@ export default function CourseDetailPage({ params }) {
                 <div className="space-y-3">
                   {dependentCourses.map((dependent) => (
                     <div
-                      key={dependent.id}
+                      key={dependent.courseId}
                       className="flex items-center justify-between p-4 border border-gray-700 rounded-lg bg-gray-800/50 hover:bg-gray-800 transition-colors"
                     >
                       <div className="flex-1">
                         <div className="flex items-center gap-3">
                           <Badge variant="outline" className="border-green-600 text-green-300 font-mono">
-                            {dependent.id}
+                            {dependent.courseId}
                           </Badge>
                           <h3 className="font-medium text-white">{dependent.title}</h3>
                         </div>
@@ -259,12 +227,12 @@ export default function CourseDetailPage({ params }) {
                         <div className="flex items-center gap-2 mt-2">
                           <span className="text-xs text-gray-500">Prerequisites:</span>
                           <div className="flex gap-1">
-                            {dependent.prerequisites.map((prereqId) => (
+                            {dependent.prerequisiteIds?.map((prereqId) => (
                               <Badge
                                 key={prereqId}
                                 variant="outline"
                                 className={`text-xs border-gray-600 ${
-                                  prereqId === courseData.id
+                                  prereqId === courseData.courseId
                                     ? "text-green-300 border-green-600 bg-green-900/20"
                                     : "text-gray-400"
                                 }`}
@@ -277,9 +245,9 @@ export default function CourseDetailPage({ params }) {
                       </div>
                       <div className="flex items-center gap-2 ml-4">
                         <Badge variant="secondary" className="bg-gray-700 text-gray-300">
-                          {dependent.instances} instances
+                          {dependent.instanceCount || dependent.instances?.length || 0} instances
                         </Badge>
-                        <Link href={`/courses/${dependent.id}`}>
+                        <Link href={`/courses/${dependent.courseId}`}>
                           <Button
                             variant="outline"
                             size="sm"
@@ -296,7 +264,7 @@ export default function CourseDetailPage({ params }) {
             </Card>
           )}
 
-          {/* No Prerequisites/Dependencies Messages */}
+          {/* No Prerequisites Message */}
           {prerequisiteCourses.length === 0 && (
             <Card className="bg-gray-900 border-gray-800">
               <CardHeader>
@@ -330,11 +298,13 @@ export default function CourseDetailPage({ params }) {
             <CardContent className="space-y-4">
               <div>
                 <p className="text-sm font-medium text-gray-400">Course ID</p>
-                <p className="text-lg font-mono text-blue-400">{courseData.id}</p>
+                <p className="text-lg font-mono text-blue-400">{courseData.courseId}</p>
               </div>
               <div>
                 <p className="text-sm font-medium text-gray-400">Total Instances</p>
-                <p className="text-lg font-semibold text-white">{courseData.instances}</p>
+                <p className="text-lg font-semibold text-white">
+                  {courseData.instanceCount || courseData.instances?.length || 0}
+                </p>
               </div>
               <div>
                 <p className="text-sm font-medium text-gray-400">Prerequisites Required</p>
@@ -357,29 +327,46 @@ export default function CourseDetailPage({ params }) {
               <CardDescription className="text-gray-400">Active and scheduled deliveries</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              {courseInstances.slice(0, 3).map((instance) => (
-                <div key={instance.id} className="p-3 border border-gray-700 rounded-lg space-y-2">
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <p className="text-sm font-medium text-white">
-                        {getSemesterName(instance.semester)}, {instance.year}
-                      </p>
-                      <p className="text-xs text-gray-400">{instance.instructor}</p>
-                    </div>
-                    <Badge className={`${getStatusColor(instance.status)} border text-xs`}>{instance.status}</Badge>
-                  </div>
-                  <div className="flex justify-between items-center text-xs">
-                    <span className="text-gray-400">
-                      <Users className="inline h-3 w-3 mr-1" />
-                      {instance.enrolled}/{instance.capacity}
-                    </span>
-                    <Link href={`/instances/${instance.id}`} className="text-blue-400 hover:underline">
-                      View Details
-                    </Link>
-                  </div>
+              {courseData.instances && courseData.instances.length > 0 ? (
+                <>
+                  {courseData.instances.slice(0, 5).map((instance) => {
+                    const status = getInstanceStatus(instance)
+                    return (
+                      <div key={instance.id} className="p-3 border border-gray-700 rounded-lg space-y-2">
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <p className="text-sm font-medium text-white">
+                              {getSemesterName(instance.semester)} {instance.year}
+                            </p>
+                            <p className="text-xs text-gray-400">Instance #{instance.id}</p>
+                          </div>
+                          <Badge className={`${getStatusColor(status)} border text-xs`}>{status}</Badge>
+                        </div>
+                        <div className="flex justify-between items-center text-xs">
+                          <span className="text-gray-400">
+                            <Calendar className="inline h-3 w-3 mr-1" />
+                            {getSemesterName(instance.semester)} {instance.year}
+                          </span>
+                          <Link href={`/instances/${instance.id}`} className="text-blue-400 hover:underline">
+                            View Details
+                          </Link>
+                        </div>
+                      </div>
+                    )
+                  })}
+                  {courseData.instances.length > 5 && (
+                    <p className="text-xs text-gray-400 text-center">
+                      And {courseData.instances.length - 5} more instances...
+                    </p>
+                  )}
+                </>
+              ) : (
+                <div className="text-center py-6">
+                  <Calendar className="mx-auto h-8 w-8 text-gray-600 mb-2" />
+                  <p className="text-gray-400 text-sm">No instances scheduled</p>
                 </div>
-              ))}
-              <Link href="/instances/create" className="block">
+              )}
+              <Link href={`/instances/create?courseId=${courseData.courseId}`} className="block">
                 <Button variant="outline" size="sm" className="w-full border-gray-600 text-gray-300 hover:bg-gray-800">
                   <Calendar className="mr-2 h-3 w-3" />
                   Create New Instance

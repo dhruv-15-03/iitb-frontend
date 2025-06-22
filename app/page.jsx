@@ -1,39 +1,92 @@
+"use client"
+
+import { useState, useEffect } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { BookOpen, Calendar, GraduationCap, Users, Plus, List, TrendingUp } from "lucide-react"
+import { BookOpen, Calendar, GraduationCap, Users, Plus, List, Loader2 } from "lucide-react"
 import Link from "next/link"
 
 export default function Dashboard() {
-  const stats = [
+  const [courses, setCourses] = useState([])
+  const [instances, setInstances] = useState([])
+  const [stats, setStats] = useState({
+    totalCourses: 0,
+    totalInstances: 0,
+    totalStudentCapacity: 0,
+    currentSemesterInstances: 0,
+  })
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
+
+  const currentYear = new Date().getFullYear()
+  const currentSemester = Math.ceil((new Date().getMonth() + 1) / 6) 
+
+  useEffect(() => {
+    fetchDashboardData()
+  }, [])
+
+  const fetchDashboardData = async () => {
+    try {
+      setLoading(true)
+      setError(null)
+      const [coursesResponse, instancesResponse] = await Promise.all([fetch("http://localhost:8082/api/courses"), fetch(`http://localhost:8082/api/instances`)])
+
+      if (!coursesResponse.ok || !instancesResponse.ok) {
+        throw new Error("Failed to fetch data")
+      }
+
+      const coursesData = await coursesResponse.json()
+      const instancesData = await instancesResponse.json()
+
+      setCourses(coursesData.data)
+      setInstances(instancesData.data)
+      console.log("Courses:", coursesData.data)
+      console.log("Instances:", instancesData.data)
+      const currentSemesterInstances = instancesData.data.filter(
+        (instance) => instance.year === currentYear && instance.semester === currentSemester,
+      ).length
+
+      const totalStudentCapacity = instancesData.data.reduce((sum, instance) => sum + instance.studentCapacity, 0)
+
+      setStats({
+        totalCourses: coursesData.data.length,
+        totalInstances: instancesData.data.length,
+        totalStudentCapacity,
+        currentSemesterInstances,
+      })
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "An error occurred")
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const dashboardStats = [
     {
       title: "Total Courses",
-      value: "24",
+      value: stats.totalCourses.toString(),
       icon: BookOpen,
       description: "Active courses",
-      trend: "+12%",
       color: "text-blue-400",
     },
     {
       title: "Course Instances",
-      value: "48",
+      value: stats.totalInstances.toString(),
       icon: Calendar,
-      description: "This semester",
-      trend: "+8%",
+      description: "All semesters",
       color: "text-green-400",
     },
     {
-      title: "Students Enrolled",
-      value: "1,247",
+      title: "Student Capacity",
+      value: stats.totalStudentCapacity.toLocaleString(),
       icon: Users,
-      description: "Across all courses",
-      trend: "+23%",
+      description: "Total capacity",
       color: "text-purple-400",
     },
     {
-      title: "Completion Rate",
-      value: "87%",
+      title: "Current Semester",
+      value: stats.currentSemesterInstances.toString(),
       icon: GraduationCap,
-      description: "Average completion",
-      trend: "+5%",
+      description: `${currentYear} Sem ${currentSemester}`,
       color: "text-orange-400",
     },
   ]
@@ -69,32 +122,58 @@ export default function Dashboard() {
     },
   ]
 
-  const recentActivity = [
-    {
-      action: "Course Created",
-      details: "Advanced React Patterns (CS 501)",
-      time: "2 hours ago",
+  const getRecentActivity = () => {
+    const recentCourses = courses.slice(-2).map((course) => ({
+      action: "Course Available",
+      details: `${course.title} (${course.courseId})`,
+      time: "Recently added",
       color: "bg-green-500",
-    },
-    {
-      action: "Instance Scheduled",
-      details: "Database Systems - Semester 1, 2025",
-      time: "5 hours ago",
-      color: "bg-blue-500",
-    },
-    {
-      action: "High Enrollment",
-      details: "87 students enrolled in Web Development",
-      time: "1 day ago",
-      color: "bg-orange-500",
-    },
-    {
-      action: "Course Completed",
-      details: "Introduction to Programming - Semester 2",
-      time: "2 days ago",
-      color: "bg-purple-500",
-    },
-  ]
+    }))
+
+    const recentInstances = instances
+      .filter((instance) => instance.year >= currentYear)
+      .slice(-2)
+      .map((instance) => ({
+        action: "Instance Scheduled",
+        details: `${instance.course?.title || "Course"} - Year ${instance.year}, Semester ${instance.semester}`,
+        time: `Capacity: ${instance.studentCapacity}`,
+        color: "bg-blue-500",
+      }))
+
+    return [...recentCourses, ...recentInstances].slice(0, 4)
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="flex items-center space-x-2 text-white">
+          <Loader2 className="h-6 w-6 animate-spin" />
+          <span>Loading dashboard data...</span>
+        </div>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <Card className="bg-red-900/20 border-red-800">
+          <CardContent className="p-6">
+            <div className="text-red-400 text-center">
+              <p className="font-semibold">Error loading dashboard</p>
+              <p className="text-sm mt-2">{error}</p>
+              <button
+                onClick={fetchDashboardData}
+                className="mt-4 px-4 py-2 bg-red-600 hover:bg-red-700 rounded-md text-white text-sm"
+              >
+                Retry
+              </button>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-8 animate-fade-in">
@@ -103,12 +182,14 @@ export default function Dashboard() {
         <h1 className="text-4xl font-bold bg-gradient-to-r from-white to-gray-400 bg-clip-text text-transparent text-center">
           Course Management Dashboard
         </h1>
-        <p className="text-gray-400 text-lg text-center">Manage your courses, track progress, and optimize learning outcomes</p>
+        <p className="text-gray-400 text-lg text-center">
+          Manage your courses, track progress, and optimize learning outcomes
+        </p>
       </div>
 
       {/* Stats Grid */}
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
-        {stats.map((stat) => (
+        {dashboardStats.map((stat) => (
           <Card key={stat.title} className="bg-gray-900 border-gray-800 card-hover">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium text-gray-300">{stat.title}</CardTitle>
@@ -116,13 +197,7 @@ export default function Dashboard() {
             </CardHeader>
             <CardContent>
               <div className="text-3xl font-bold text-white mb-1">{stat.value}</div>
-              <div className="flex items-center justify-between">
-                <p className="text-xs text-gray-400">{stat.description}</p>
-                <div className="flex items-center text-xs text-green-400">
-                  <TrendingUp className="h-3 w-3 mr-1" />
-                  {stat.trend}
-                </div>
-              </div>
+              <p className="text-xs text-gray-400">{stat.description}</p>
             </CardContent>
           </Card>
         ))}
@@ -155,23 +230,30 @@ export default function Dashboard() {
             <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
             Recent Activity
           </CardTitle>
-          <CardDescription className="text-gray-400">Latest updates in your course management system</CardDescription>
+          <CardDescription className="text-gray-400">Latest courses and instances in your system</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
-            {recentActivity.map((activity, index) => (
-              <div
-                key={index}
-                className="flex items-center space-x-4 p-3 rounded-lg bg-gray-800/50 hover:bg-gray-800 transition-colors"
-              >
-                <div className={`w-3 h-3 ${activity.color} rounded-full flex-shrink-0`}></div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-white truncate">{activity.action}</p>
-                  <p className="text-sm text-gray-400 truncate">{activity.details}</p>
+            {getRecentActivity().length > 0 ? (
+              getRecentActivity().map((activity, index) => (
+                <div
+                  key={index}
+                  className="flex items-center space-x-4 p-3 rounded-lg bg-gray-800/50 hover:bg-gray-800 transition-colors"
+                >
+                  <div className={`w-3 h-3 ${activity.color} rounded-full flex-shrink-0`}></div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-white truncate">{activity.action}</p>
+                    <p className="text-sm text-gray-400 truncate">{activity.details}</p>
+                  </div>
+                  <div className="text-xs text-gray-500 flex-shrink-0">{activity.time}</div>
                 </div>
-                <div className="text-xs text-gray-500 flex-shrink-0">{activity.time}</div>
+              ))
+            ) : (
+              <div className="text-center py-8 text-gray-400">
+                <p>No recent activity to display</p>
+                <p className="text-sm mt-1">Create some courses and instances to see activity here</p>
               </div>
-            ))}
+            )}
           </div>
         </CardContent>
       </Card>
